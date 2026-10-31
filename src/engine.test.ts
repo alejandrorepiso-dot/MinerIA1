@@ -1,0 +1,13 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {defaults,calculate,savingsTax,businessTax,validate} from './engine.ts';
+test('dividend tax brackets and incremental tax',()=>{assert.equal(savingsTax(6000),1140);assert.equal(savingsTax(50000),10380);assert.equal(savingsTax(300001),71880.3);});
+test('2026 business rates respect turnover and taxable base boundaries',()=>{assert.equal(businessTax(60000,999999),11600);assert.equal(businessTax(60000,1e6),13800);assert.equal(businessTax(60000,1e7),15000);assert.equal(businessTax(-100,100),0);assert.equal(businessTax(60000,100,true),15000);});
+test('vacancy, depreciation and principal have different cash/tax effects',()=>{const r=calculate(defaults).scenarios[0];assert.equal(r.base,51200);assert.equal(r.tax,12800);assert.equal(r.cash,48400);const x=calculate({...defaults,principal:0}).scenarios[0];assert.equal(x.tax,r.tax);assert.equal(x.cash-r.cash,12000);});
+test('employee annual cost applies only to activity scenario',()=>{const r=calculate(defaults);assert.equal(r.scenarios[0].staff,0);assert.equal(r.scenarios[1].staff,30000);assert.equal(calculate({...defaults,staff:'existing'}).scenarios[1].staff,0);});
+test('EDAV excludes short stay and fewer than eight homes',()=>{for(const overrides of [{homes:7},{rental:'tourist'},{holdYears:2},{separateAccounts:false},{housingShare:54}])assert.equal(calculate({...defaults,...overrides}).scenarios.length,2);assert.equal(calculate(defaults).scenarios.length,3);});
+test('EDAV bonus applies only to estimated residential share',()=>{const r=calculate({...defaults,staff:'existing'}).scenarios[2];assert.equal(r.tax,8448);});
+test('losses generate no immediate negative tax or dividends',()=>{const r=calculate({...defaults,annualRent:1000}).scenarios[0];assert.equal(r.tax,0);assert.equal(r.personal,0);assert.ok(r.retained<0);});
+test('unsupported territory never produces a recommendation',()=>{assert.equal(calculate({...defaults,territory:'foral'}).comparable,false);});
+test('invalid numbers and percentages rejected',()=>{assert.ok(validate({...defaults,vacancy:101}).length);assert.ok(validate({...defaults,annualRent:NaN}).length);assert.ok(validate({...defaults,homes:.5}).length);});
+test('dividends limited by accounting profit and annual cash',()=>{const r=calculate({...defaults,distribute:100}).scenarios[0];assert.equal(r.retained,10000);assert.equal(r.personal,38400-savingsTax(38400));});
